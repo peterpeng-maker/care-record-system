@@ -233,6 +233,78 @@ async function sendToSheets(record) {
   }
 }
 
+// Fetch ALL records from Google Sheets (for admin dashboard)
+async function fetchFromSheets() {
+  if (!state.sheetsUrl) return null;
+  try {
+    const url = state.sheetsUrl + '?action=list';
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const rows = await resp.json();
+    if (!Array.isArray(rows)) return null;
+
+    // Map Sheets column names → state.records format
+    const colMap = {
+      '提交日期': 'submittedAt', '志工姓名': 'volunteerName', '英文姓名': 'volunteerNameEn',
+      '團隊': 'teamName', '個案標號': 'familyId', '關懷組別': 'group',
+      '月份': 'month', '本月關懷': 'visited', '家庭狀況': 'familyStatus',
+      '兒童狀況': 'childStatus', '關懷態度': 'attitude', '互動情況': 'interaction',
+      '需要協助': 'needsHelp', '備註': 'notes',
+    };
+    return rows.map((row, idx) => {
+      const rec = { id: 'sheets-' + idx };
+      Object.entries(colMap).forEach(([zh, en]) => {
+        let val = row[zh] || '';
+        // 陣列欄位：還原為 array
+        if (en === 'familyStatus' || en === 'childStatus') {
+          val = val ? val.split('、').filter(Boolean) : [];
+        }
+        // 找出 teamId
+        if (en === 'teamName') {
+          const team = state.teams.find(t => t.name === val);
+          rec.teamId = team ? team.id : val;
+        }
+        rec[en] = val;
+      });
+      return rec;
+    });
+  } catch (e) {
+    console.warn('Fetch from Sheets failed:', e);
+    return null;
+  }
+}
+
+async function syncAndRefresh() {
+  showSyncStatus('syncing');
+  if (state.sheetsUrl) {
+    const sheetsRecords = await fetchFromSheets();
+    if (sheetsRecords !== null) {
+      state.records = sheetsRecords;
+      showSyncStatus('ok');
+    } else {
+      showSyncStatus('error');
+    }
+  } else {
+    showSyncStatus('local');
+  }
+  setupAdminFilters();
+  refreshDashboard();
+  renderRecordsTable();
+}
+
+function showSyncStatus(s) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const map = {
+    syncing: '🔄 同步中...',
+    ok:      '✅ 已從 Google Sheets 同步',
+    error:   '⚠️ 無法連線 Sheets，顯示本機資料',
+    local:   '💾 本機資料（未設定 Sheets）',
+  };
+  el.textContent = map[s] || '';
+  el.className = 'sync-badge sync-' + s;
+}
+
 // ===========================
 // ADMIN
 // ===========================
@@ -245,10 +317,8 @@ function loginAdmin() {
   if (pw === state.adminPassword) {
     state.isAdmin = true;
     showScreen('screen-admin');
-    refreshDashboard();
-    renderRecordsTable();
     renderTeamsAdmin();
-    setupAdminFilters();
+    syncAndRefresh();  // fetch from Sheets + render
     document.getElementById('admin-password').value = '';
   } else {
     showToast('密碼錯誤', 'error');
@@ -273,8 +343,8 @@ function showAdminTab(tab) {
   document.getElementById(`tab-${tab}`)?.classList.add('active');
   document.getElementById(`nav-${tab}`)?.classList.add('active');
 
-  if (tab === 'dashboard') refreshDashboard();
-  if (tab === 'records') renderRecordsTable();
+  if (tab === 'dashboard') syncAndRefresh();
+  if (tab === 'records') { syncAndRefresh(); }
   if (tab === 'teams') renderTeamsAdmin();
 }
 
@@ -685,13 +755,41 @@ function changePassword() {
 function showScriptCode() {
   const code = `// Google Apps Script - 貼到 Google Sheets 的 Apps Script 編輯器
 // 部署為網頁應用程式後，複製 URL 到系統設定中
+// ⚠️ 部署設定：執行身份 = 「我」，存取權限 = 「所有人」
 
-function doPost(e) {
+function doGet(e) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+  // 「讀取所有紀錄」模式（後台安設管理界面使用）
+  if (e.parameter && e.parameter.action === 'list') {
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      return ContentService
+        .createTextOutput(JSON.stringify([]))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    const headers = data[0];
+    const records = data.slice(1).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = row[i]; });
+      return obj;
+    });
+    return ContentService
+      .createTextOutput(JSON.stringify(records))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 「新增紀錄」模式（志工填表使用）
   try {
-    const data = JSON.parse(e.postData.contents);
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    if (!e.parameter || !e.parameter.data) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ status: 'ok', message: '關懷紀錄 API 運行中' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
 
-    // 如果第一行是空的，加入標題
+    const data = JSON.parse(e.parameter.data);
+
+    // 如果是空試算表，加入標題列
     if (sheet.getLastRow() === 0) {
       sheet.appendRow([
         '提交日期', '志工姓名', '英文姓名', '團隊', '個案標號',
@@ -712,17 +810,12 @@ function doPost(e) {
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'ok' }))
       .setMimeType(ContentService.MimeType.JSON);
+
   } catch(err) {
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
-}
-
-function doGet(e) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ status: 'ok', message: '關懷紀錄 API 運行中' }))
-    .setMimeType(ContentService.MimeType.JSON);
 }`;
 
   openModal(`
