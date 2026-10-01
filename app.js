@@ -225,12 +225,9 @@ function submitAnother() {
 async function sendToSheets(record) {
   if (!state.sheetsUrl) return;
   try {
-    await fetch(state.sheetsUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(record),
-    });
+    // Use GET + URL param — most reliable cross-origin method for Apps Script
+    const url = state.sheetsUrl + '?data=' + encodeURIComponent(JSON.stringify(record));
+    await fetch(url, { method: 'GET', mode: 'no-cors' });
   } catch (e) {
     console.warn('Google Sheets sync failed:', e);
   }
