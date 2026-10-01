@@ -1,4 +1,9 @@
 // ===========================
+// CONFIG & CONSTANTS
+// ===========================
+const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxwTNklfYDXQf89KA2Aj5msPHFQ3BSst9O36HtvT4Rs4hERIm1wjfIrwDFvIUjFcdQY/exec';
+
+// ===========================
 // STATE
 // ===========================
 let state = {
@@ -10,7 +15,7 @@ let state = {
   records: [],
   teams: [],
   adminPassword: 'admin123',
-  sheetsUrl: '',
+  sheetsUrl: DEFAULT_SHEETS_URL,
   isAdmin: false,
 };
 
@@ -20,7 +25,7 @@ let state = {
 document.addEventListener('DOMContentLoaded', async () => {
   loadFromStorage();
 
-  // 1) Check URL for ?sid= (shared config link from admin)
+  // 1) Check URL for ?sid= (shared config link from admin if custom URL used)
   const urlParams = new URLSearchParams(window.location.search);
   const sid = urlParams.get('sid');
   if (sid) {
@@ -30,20 +35,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         state.sheetsUrl = cfg.sheetsUrl;
         saveToStorage();
       }
-      // Clean URL without reloading
       history.replaceState(null, '', window.location.pathname);
     } catch(e) { console.warn('Invalid sid param', e); }
   }
 
-  // 2) If sheetsUrl is set, fetch teams from Sheets (overrides localStorage)
-  if (state.sheetsUrl) {
-    const sheetsTeams = await fetchTeamsFromSheets();
-    if (sheetsTeams && sheetsTeams.length > 0) {
-      state.teams = sheetsTeams;
-      saveToStorage();
-    }
-  }
-
+  // 2) Initial render immediately for fast first paint
   renderTeamList();
   setupAdminFilters();
 
@@ -53,6 +49,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const monthInput = document.getElementById('f-month');
   if (monthInput) monthInput.value = `${yyyy}-${mm}`;
+
+  // 3) Fetch latest teams from Sheets in background and update UI
+  if (state.sheetsUrl) {
+    try {
+      const sheetsTeams = await fetchTeamsFromSheets();
+      if (sheetsTeams && sheetsTeams.length > 0) {
+        state.teams = sheetsTeams;
+        saveToStorage();
+        renderTeamList();
+        setupAdminFilters();
+      }
+    } catch (e) {
+      console.warn('Init teams fetch failed:', e);
+    }
+  }
 });
 
 // ===========================
@@ -65,10 +76,14 @@ function loadFromStorage() {
     state.records = data.records || [];
     state.teams = data.teams || getDefaultTeams();
     state.adminPassword = data.adminPassword || 'admin123';
-    state.sheetsUrl = data.sheetsUrl || '';
+    state.sheetsUrl = data.sheetsUrl || DEFAULT_SHEETS_URL;
   } else {
     state.teams = getDefaultTeams();
+    state.sheetsUrl = DEFAULT_SHEETS_URL;
     saveToStorage();
+  }
+  if (!state.sheetsUrl) {
+    state.sheetsUrl = DEFAULT_SHEETS_URL;
   }
 }
 
