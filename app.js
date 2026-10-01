@@ -17,8 +17,33 @@ let state = {
 // ===========================
 // INIT
 // ===========================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   loadFromStorage();
+
+  // 1) Check URL for ?sid= (shared config link from admin)
+  const urlParams = new URLSearchParams(window.location.search);
+  const sid = urlParams.get('sid');
+  if (sid) {
+    try {
+      const cfg = JSON.parse(atob(sid));
+      if (cfg.sheetsUrl) {
+        state.sheetsUrl = cfg.sheetsUrl;
+        saveToStorage();
+      }
+      // Clean URL without reloading
+      history.replaceState(null, '', window.location.pathname);
+    } catch(e) { console.warn('Invalid sid param', e); }
+  }
+
+  // 2) If sheetsUrl is set, fetch teams from Sheets (overrides localStorage)
+  if (state.sheetsUrl) {
+    const sheetsTeams = await fetchTeamsFromSheets();
+    if (sheetsTeams && sheetsTeams.length > 0) {
+      state.teams = sheetsTeams;
+      saveToStorage();
+    }
+  }
+
   renderTeamList();
   setupAdminFilters();
 
@@ -225,12 +250,132 @@ function submitAnother() {
 async function sendToSheets(record) {
   if (!state.sheetsUrl) return;
   try {
-    // Use GET + URL param — most reliable cross-origin method for Apps Script
     const url = state.sheetsUrl + '?data=' + encodeURIComponent(JSON.stringify(record));
     await fetch(url, { method: 'GET', mode: 'no-cors' });
   } catch (e) {
     console.warn('Google Sheets sync failed:', e);
   }
+}
+
+// Fetch ALL records from Google Sheets (for admin dashboard)
+async function fetchFromSheets() {
+  if (!state.sheetsUrl) return null;
+  try {
+    const url = state.sheetsUrl + '?action=list';
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const rows = await resp.json();
+    if (!Array.isArray(rows)) return null;
+    const colMap = {
+      '提交日期': 'submittedAt', '志工姓名': 'volunteerName', '英文姓名': 'volunteerNameEn',
+      '團隊': 'teamName', '個案標號': 'familyId', '關懷組別': 'group',
+      '月份': 'month', '本月關懷': 'visited', '家庭狀況': 'familyStatus',
+      '兒童狀況': 'childStatus', '關懷態度': 'attitude', '互動情況': 'interaction',
+      '需要協助': 'needsHelp', '備註': 'notes',
+    };
+    return rows.map((row, idx) => {
+      const rec = { id: 'sheets-' + idx };
+      Object.entries(colMap).forEach(([zh, en]) => {
+        let val = row[zh] || '';
+        if (en === 'familyStatus' || en === 'childStatus') {
+          val = val ? val.split('、').filter(Boolean) : [];
+        }
+        if (en === 'teamName') {
+          const team = state.teams.find(t => t.name === val);
+          rec.teamId = team ? team.id : val;
+        }
+        rec[en] = val;
+      });
+      return rec;
+    });
+  } catch (e) {
+    console.warn('Fetch from Sheets failed:', e);
+    return null;
+  }
+}
+
+// Fetch teams config from Sheets
+async function fetchTeamsFromSheets() {
+  if (!state.sheetsUrl) return null;
+  try {
+    const url = state.sheetsUrl + '?action=getTeams';
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (Array.isArray(data) && data.length > 0) return data;
+    return null;
+  } catch (e) {
+    console.warn('Fetch teams failed:', e);
+    return null;
+  }
+}
+
+// Save teams config to Sheets
+async function saveTeamsToSheets() {
+  if (!state.sheetsUrl) return;
+  try {
+    const url = state.sheetsUrl + '?action=saveTeams&teams=' + encodeURIComponent(JSON.stringify(state.teams));
+    await fetch(url, { method: 'GET', mode: 'no-cors' });
+  } catch (e) {
+    console.warn('Save teams failed:', e);
+  }
+}
+
+async function syncAndRefresh() {
+  showSyncStatus('syncing');
+  if (state.sheetsUrl) {
+    // Sync teams first
+    const sheetsTeams = await fetchTeamsFromSheets();
+    if (sheetsTeams && sheetsTeams.length > 0) {
+      state.teams = sheetsTeams;
+      saveToStorage();
+      renderTeamList();
+      setupAdminFilters();
+    }
+    // Then sync records
+    const sheetsRecords = await fetchFromSheets();
+    if (sheetsRecords !== null) {
+      state.records = sheetsRecords;
+      showSyncStatus('ok');
+    } else {
+      showSyncStatus('error');
+    }
+  } else {
+    showSyncStatus('local');
+  }
+  setupAdminFilters();
+  refreshDashboard();
+  renderRecordsTable();
+}
+
+function showSyncStatus(s) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const map = {
+    syncing: '🔄 同步中...',
+    ok:      '✅ 已從 Google Sheets 同步',
+    error:   '⚠️ 無法連線 Sheets，顯示本機資料',
+    local:   '💾 本機資料（未設定 Sheets）',
+  };
+  el.textContent = map[s] || '';
+  el.className = 'sync-badge sync-' + s;
+}
+
+// Generate a share link that auto-configures any device
+function generateShareLink() {
+  if (!state.sheetsUrl) return showToast('請先設定 Google Sheets URL', 'error');
+  const cfg = btoa(JSON.stringify({ sheetsUrl: state.sheetsUrl }));
+  const link = `${location.origin}${location.pathname}?sid=${cfg}`;
+  navigator.clipboard.writeText(link).then(() => {
+    showToast('分享連結已複製！志工點此連結即可自動同步設定 ✅', 'success');
+  }).catch(() => {
+    openModal(`
+      <h3 class="modal-title">📱 志工分享連結</h3>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">複製以下連結，分享給所有志工。點開後會自動同步團隊設定。</p>
+      <div class="code-block" style="word-break:break-all;font-size:12px">${link}</div>
+      <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">關閉</button></div>
+    `);
+  });
 }
 
 // Fetch ALL records from Google Sheets (for admin dashboard)
@@ -701,11 +846,12 @@ function addTeam() {
 
   state.teams.push(team);
   saveToStorage();
+  saveTeamsToSheets();  // sync to all devices
   closeModal();
   renderTeamsAdmin();
   renderTeamList();
   setupAdminFilters();
-  showToast(`團隊「${name}」已建立`, 'success');
+  showToast(`團隊「${name}」已建立，已同步到所有裝置`, 'success');
 }
 
 function deleteTeam(id) {
@@ -714,10 +860,11 @@ function deleteTeam(id) {
   if (!confirm(`確定要刪除「${team.name}」？此操作不會刪除該團隊的紀錄。`)) return;
   state.teams = state.teams.filter(t => t.id !== id);
   saveToStorage();
+  saveTeamsToSheets();  // sync to all devices
   renderTeamsAdmin();
   renderTeamList();
   setupAdminFilters();
-  showToast('團隊已刪除', 'success');
+  showToast('團隊已刪除，已同步到所有裝置', 'success');
 }
 
 // ===========================
@@ -731,8 +878,14 @@ function saveSettings() {
   const statusEl = document.getElementById('sheets-status');
   if (url) {
     statusEl.className = 'settings-status status-ok';
-    statusEl.textContent = '✅ Google Sheets 連結已儲存';
+    statusEl.innerHTML = `
+      ✅ Google Sheets 連結已儲存<br>
+      <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="generateShareLink()">
+        📱 產生志工分享連結
+      </button>`;
     showToast('設定已儲存', 'success');
+    // Also sync current teams to Sheets
+    saveTeamsToSheets();
   } else {
     statusEl.className = 'settings-status';
     statusEl.textContent = '';
@@ -753,69 +906,76 @@ function changePassword() {
 }
 
 function showScriptCode() {
-  const code = `// Google Apps Script - 貼到 Google Sheets 的 Apps Script 編輯器
-// 部署為網頁應用程式後，複製 URL 到系統設定中
+  const code = `// Google Apps Script
 // ⚠️ 部署設定：執行身份 = 「我」，存取權限 = 「所有人」
+// 每次修改後請「部署 → 管理部署作業 → 選新版本 → 部署」
+
+const SS = SpreadsheetApp.getActiveSpreadsheet();
+
+function getSheet(name) {
+  return SS.getSheetByName(name) || SS.insertSheet(name);
+}
 
 function doGet(e) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const action = e.parameter && e.parameter.action;
 
-  // 「讀取所有紀錄」模式（後台安設管理界面使用）
-  if (e.parameter && e.parameter.action === 'list') {
+  // 讀取所有紀錄（後台管理使用）
+  if (action === 'list') {
+    const sheet = getSheet('紀錄');
     const data = sheet.getDataRange().getValues();
-    if (data.length <= 1) {
-      return ContentService
-        .createTextOutput(JSON.stringify([]))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
+    if (data.length <= 1) return json([]);
     const headers = data[0];
-    const records = data.slice(1).map(row => {
+    return json(data.slice(1).map(row => {
       const obj = {};
       headers.forEach((h, i) => { obj[h] = row[i]; });
       return obj;
-    });
-    return ContentService
-      .createTextOutput(JSON.stringify(records))
-      .setMimeType(ContentService.MimeType.JSON);
+    }));
   }
 
-  // 「新增紀錄」模式（志工填表使用）
-  try {
-    if (!e.parameter || !e.parameter.data) {
-      return ContentService
-        .createTextOutput(JSON.stringify({ status: 'ok', message: '關懷紀錄 API 運行中' }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
+  // 讀取團隊設定（跨裝置同步）
+  if (action === 'getTeams') {
+    const sheet = getSheet('團隊設定');
+    const val = sheet.getRange('A1').getValue();
+    if (!val) return json([]);
+    try { return json(JSON.parse(val)); }
+    catch(err2) { return json([]); }
+  }
 
-    const data = JSON.parse(e.parameter.data);
+  // 儲存團隊設定（管理員新增/刪除團隊時呼叫）
+  if (action === 'saveTeams' && e.parameter.teams) {
+    const sheet = getSheet('團隊設定');
+    sheet.getRange('A1').setValue(e.parameter.teams);
+    return json({ status: 'ok' });
+  }
 
-    // 如果是空試算表，加入標題列
-    if (sheet.getLastRow() === 0) {
+  // 新增紀錄（志工填表使用）
+  if (e.parameter && e.parameter.data) {
+    try {
+      const rec = JSON.parse(e.parameter.data);
+      const sheet = getSheet('紀錄');
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow(['提交日期','志工姓名','英文姓名','團隊','個案標號',
+          '關懷組別','月份','本月關懷','家庭狀況','兒童狀況',
+          '關懷態度','互動情況','需要協助','備註']);
+      }
       sheet.appendRow([
-        '提交日期', '志工姓名', '英文姓名', '團隊', '個案標號',
-        '關懷組別', '月份', '本月關懷', '家庭狀況', '兒童狀況',
-        '關懷態度', '互動情況', '需要協助', '備註'
+        new Date(rec.submittedAt).toLocaleString('zh-TW'),
+        rec.volunteerName, rec.volunteerNameEn, rec.teamName, rec.familyId,
+        rec.group, rec.month, rec.visited,
+        (rec.familyStatus||[]).join('、'), (rec.childStatus||[]).join('、'),
+        rec.attitude, rec.interaction, rec.needsHelp, rec.notes
       ]);
-    }
-
-    sheet.appendRow([
-      new Date(data.submittedAt).toLocaleString('zh-TW'),
-      data.volunteerName, data.volunteerNameEn, data.teamName, data.familyId,
-      data.group, data.month, data.visited,
-      (data.familyStatus || []).join('、'),
-      (data.childStatus || []).join('、'),
-      data.attitude, data.interaction, data.needsHelp, data.notes
-    ]);
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: 'ok' }))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch(err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+      return json({ status: 'ok' });
+    } catch(err) { return json({ status: 'error', message: err.toString() }); }
   }
+
+  return json({ status: 'ok', message: '關懷紀錄 API 運行中' });
+}
+
+function json(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }`;
 
   openModal(`
