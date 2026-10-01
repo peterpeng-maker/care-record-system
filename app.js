@@ -151,7 +151,8 @@ function enterAsVolunteer() {
 
   // Update form UI
   document.getElementById('form-team-label').textContent = state.currentTeam.emoji + ' ' + state.currentTeam.name;
-  document.getElementById('volunteer-badge').textContent = name;
+  document.getElementById('volunteer-badge').textContent = '服事夥伴：' + name;
+  showToast(`平安，${name} 夥伴！`, 'success');
 
   // Reset form to step 1
   goToStep(1);
@@ -282,11 +283,22 @@ async function fetchFromSheets() {
     const rows = await resp.json();
     if (!Array.isArray(rows)) return null;
     const colMap = {
-      '提交日期': 'submittedAt', '志工姓名': 'volunteerName', '英文姓名': 'volunteerNameEn',
-      '團隊': 'teamName', '個案標號': 'familyId', '關懷組別': 'group',
-      '月份': 'month', '本月關懷': 'visited', '家庭狀況': 'familyStatus',
-      '兒童狀況': 'childStatus', '關懷態度': 'attitude', '互動情況': 'interaction',
-      '需要協助': 'needsHelp', '備註': 'notes',
+      '提交日期': 'submittedAt',
+      '服事夥伴': 'volunteerName',
+      '服事夥伴姓名': 'volunteerName',
+      '志工姓名': 'volunteerName',
+      '英文姓名': 'volunteerNameEn',
+      '團隊': 'teamName',
+      '個案標號': 'familyId',
+      '關懷組別': 'group',
+      '月份': 'month',
+      '本月關懷': 'visited',
+      '家庭狀況': 'familyStatus',
+      '兒童狀況': 'childStatus',
+      '關懷態度': 'attitude',
+      '互動情況': 'interaction',
+      '需要協助': 'needsHelp',
+      '備註': 'notes',
     };
     return rows.map((row, idx) => {
       const rec = { id: 'sheets-' + idx };
@@ -439,87 +451,15 @@ function generateShareLink() {
   const cfg = btoa(JSON.stringify({ sheetsUrl: state.sheetsUrl }));
   const link = `${location.origin}${location.pathname}?sid=${cfg}`;
   navigator.clipboard.writeText(link).then(() => {
-    showToast('分享連結已複製！志工點此連結即可自動同步設定 ✅', 'success');
+    showToast('分享連結已複製！夥伴點此連結即可自動同步設定 ✅', 'success');
   }).catch(() => {
     openModal(`
-      <h3 class="modal-title">📱 志工分享連結</h3>
-      <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">複製以下連結，分享給所有志工。點開後會自動同步團隊設定。</p>
+      <h3 class="modal-title">📱 服事夥伴分享連結</h3>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">複製以下連結，分享給所有服事夥伴。點開後會自動同步團隊設定。</p>
       <div class="code-block" style="word-break:break-all;font-size:12px">${link}</div>
       <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">關閉</button></div>
     `);
   });
-}
-
-// Fetch ALL records from Google Sheets (for admin dashboard)
-async function fetchFromSheets() {
-  if (!state.sheetsUrl) return null;
-  try {
-    const url = state.sheetsUrl + '?action=list';
-    const resp = await fetch(url);
-    if (!resp.ok) return null;
-    const rows = await resp.json();
-    if (!Array.isArray(rows)) return null;
-
-    // Map Sheets column names → state.records format
-    const colMap = {
-      '提交日期': 'submittedAt', '志工姓名': 'volunteerName', '英文姓名': 'volunteerNameEn',
-      '團隊': 'teamName', '個案標號': 'familyId', '關懷組別': 'group',
-      '月份': 'month', '本月關懷': 'visited', '家庭狀況': 'familyStatus',
-      '兒童狀況': 'childStatus', '關懷態度': 'attitude', '互動情況': 'interaction',
-      '需要協助': 'needsHelp', '備註': 'notes',
-    };
-    return rows.map((row, idx) => {
-      const rec = { id: 'sheets-' + idx };
-      Object.entries(colMap).forEach(([zh, en]) => {
-        let val = row[zh] || '';
-        // 陣列欄位：還原為 array
-        if (en === 'familyStatus' || en === 'childStatus') {
-          val = val ? val.split('、').filter(Boolean) : [];
-        }
-        // 找出 teamId
-        if (en === 'teamName') {
-          const team = state.teams.find(t => t.name === val);
-          rec.teamId = team ? team.id : val;
-        }
-        rec[en] = val;
-      });
-      return rec;
-    });
-  } catch (e) {
-    console.warn('Fetch from Sheets failed:', e);
-    return null;
-  }
-}
-
-async function syncAndRefresh() {
-  showSyncStatus('syncing');
-  if (state.sheetsUrl) {
-    const sheetsRecords = await fetchFromSheets();
-    if (sheetsRecords !== null) {
-      state.records = sheetsRecords;
-      showSyncStatus('ok');
-    } else {
-      showSyncStatus('error');
-    }
-  } else {
-    showSyncStatus('local');
-  }
-  setupAdminFilters();
-  refreshDashboard();
-  renderRecordsTable();
-}
-
-function showSyncStatus(s) {
-  const el = document.getElementById('sync-status');
-  if (!el) return;
-  const map = {
-    syncing: '🔄 同步中...',
-    ok:      '✅ 已從 Google Sheets 同步',
-    error:   '⚠️ 無法連線 Sheets，顯示本機資料',
-    local:   '💾 本機資料（未設定 Sheets）',
-  };
-  el.textContent = map[s] || '';
-  el.className = 'sync-badge sync-' + s;
 }
 
 // ===========================
@@ -738,7 +678,7 @@ function renderAlertFamilies(records) {
       <div class="alert-dot"></div>
       <div class="alert-item-info">
         <div class="alert-family-id">家庭 ${r.familyId} <span class="badge badge-alert">${r.teamName}</span></div>
-        <div class="alert-meta">志工：${r.volunteerName}｜月份：${r.month}｜${r.notes ? '備註：' + r.notes.substring(0, 40) + '…' : '無備註'}</div>
+        <div class="alert-meta">服事夥伴：${r.volunteerName}｜月份：${r.month}｜${r.notes ? '備註：' + r.notes.substring(0, 40) + '…' : '無備註'}</div>
       </div>
     </div>
   `).join('');
@@ -806,7 +746,7 @@ function formatDate(iso) {
 // EXPORT CSV
 // ===========================
 function exportCSV() {
-  const headers = ['提交日期', '志工姓名', '英文姓名', '團隊', '個案標號', '關懷組別', '月份', '本月關懷', '家庭狀況', '兒童狀況', '關懷態度', '互動情況', '需要協助', '備註'];
+  const headers = ['提交日期', '服事夥伴姓名', '英文姓名', '團隊', '個案標號', '關懷組別', '月份', '本月關懷', '家庭狀況', '兒童狀況', '關懷態度', '互動情況', '需要協助', '備註'];
   const rows = state.records.map(r => [
     formatDate(r.submittedAt),
     r.volunteerName, r.volunteerNameEn, r.teamName, r.familyId, r.group, r.month,
@@ -953,7 +893,7 @@ function saveSettings() {
     statusEl.innerHTML = `
       ✅ Google Sheets 連結已儲存<br>
       <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="generateShareLink()">
-        📱 產生志工分享連結
+        📱 產生夥伴分享連結
       </button>`;
     showToast('設定已儲存', 'success');
     // Also sync current teams to Sheets
