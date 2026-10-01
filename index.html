@@ -8,7 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link rel="stylesheet" href="style.css?v=20261001-3" />
 </head>
 <body>
   <!-- App Container -->
@@ -29,7 +32,12 @@
         </div>
 
         <div class="team-select-section">
-          <label class="field-label">選擇您的事工團隊</label>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label class="field-label" style="margin-bottom:0">選擇您的事工團隊</label>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh-teams" onclick="manualSyncTeams(this)" title="從雲端取得最新團隊" style="padding:4px 8px; font-size:12px; height:auto; color:var(--primary);">
+              🔄 取得最新團隊
+            </button>
+          </div>
           <div id="team-list" class="team-grid"></div>
         </div>
 
@@ -417,10 +425,15 @@
           <div id="tab-teams" class="admin-tab">
             <div class="tab-header">
               <h2 class="tab-title">團隊管理</h2>
-              <button class="btn btn-primary" onclick="showAddTeamModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                新增團隊
-              </button>
+              <div style="display:flex; gap:10px; align-items:center;">
+                <button class="btn btn-outline" id="btn-publish-teams" onclick="publishTeamsToCloud()">
+                  🚀 發布同步至所有裝置
+                </button>
+                <button class="btn btn-primary" onclick="showAddTeamModal()">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  新增團隊
+                </button>
+              </div>
             </div>
             <div id="teams-grid" class="teams-grid"></div>
           </div>
@@ -482,6 +495,6 @@
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20261001-3"></script>
 </body>
 </html>

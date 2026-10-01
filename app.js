@@ -336,6 +336,63 @@ async function saveTeamsToSheets() {
   }
 }
 
+// 手動在前台重新同步團隊
+async function manualSyncTeams(btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '🔄 同步中...';
+  }
+  showToast('正在向雲端取得最新團隊名單...', 'info');
+  try {
+    const sheetsTeams = await fetchTeamsFromSheets();
+    if (sheetsTeams && sheetsTeams.length > 0) {
+      state.teams = sheetsTeams;
+      saveToStorage();
+      renderTeamList();
+      setupAdminFilters();
+      showToast('✅ 已同步最新團隊清單！', 'success');
+    } else {
+      showToast('目前團隊清單已是最新', 'info');
+    }
+  } catch (e) {
+    showToast('同步失敗，請檢查網路連線', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 取得最新團隊';
+    }
+  }
+}
+
+// 管理員一鍵發布團隊設定至雲端（讓所有裝置即時同步）
+async function publishTeamsToCloud() {
+  const btn = document.getElementById('btn-publish-teams');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ 發布同步中...';
+  }
+  showToast('正在發布團隊至 Google 雲端...', 'info');
+  try {
+    await saveTeamsToSheets();
+    await new Promise(r => setTimeout(r, 1200));
+    const sheetsTeams = await fetchTeamsFromSheets();
+    if (sheetsTeams && sheetsTeams.length > 0) {
+      state.teams = sheetsTeams;
+      saveToStorage();
+      renderTeamsAdmin();
+      renderTeamList();
+    }
+    showToast('🚀 團隊設定已成功發布！所有裝置現在皆可看到最新設定', 'success');
+  } catch (e) {
+    showToast('發布可能未完成，請稍候重試', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🚀 發布同步至所有裝置';
+    }
+  }
+}
+
 async function syncAndRefresh() {
   showSyncStatus('syncing');
   if (state.sheetsUrl) {
