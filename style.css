@@ -1119,13 +1119,111 @@ select.field-input {
 .team-card-name {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  font-size: 16px;
+  gap: var(--space-xs);
+  font-size: 15px;
   font-weight: 600;
 }
 
+.team-order-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 .team-card-emoji {
-  font-size: 26px;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.team-card-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background-color: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-order:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-order:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.btn-edit {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-family);
+  transition: var(--transition);
+}
+
+.btn-edit:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Emoji Picker Options */
+.emoji-picker-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.emoji-opt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.emoji-opt-btn:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.emoji-opt-btn.selected {
+  border-color: var(--primary);
+  background-color: var(--primary-subtle);
+  color: #ffffff;
 }
 
 .team-card-stats {

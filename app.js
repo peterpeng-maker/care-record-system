@@ -123,7 +123,7 @@ function renderTeamList() {
     <button class="team-btn ${state.currentTeam?.id === team.id ? 'selected' : ''}"
       id="team-btn-${team.id}"
       onclick="selectTeam('${team.id}')">
-      <span class="team-emoji">${team.emoji}</span>
+      ${team.emoji ? `<span class="team-emoji">${team.emoji}</span>` : ''}
       <span>${team.name}</span>
     </button>
   `).join('');
@@ -150,7 +150,8 @@ function enterAsVolunteer() {
   state.volunteerNameEn = nameEn;
 
   // Update form UI
-  document.getElementById('form-team-label').textContent = state.currentTeam.emoji + ' ' + state.currentTeam.name;
+  const teamLabel = (state.currentTeam.emoji ? state.currentTeam.emoji + ' ' : '') + state.currentTeam.name;
+  document.getElementById('form-team-label').textContent = teamLabel;
   document.getElementById('volunteer-badge').textContent = '服事夥伴：' + name;
   showToast(`平安，${name} 夥伴！`, 'success');
 
@@ -780,25 +781,38 @@ function renderTeamsAdmin() {
     return;
   }
 
-  container.innerHTML = state.teams.map(team => {
+  container.innerHTML = state.teams.map((team, idx) => {
     const teamRecords = state.records.filter(r => r.teamId === team.id);
     const families = new Set(teamRecords.map(r => r.familyId)).size;
+    const isFirst = idx === 0;
+    const isLast = idx === state.teams.length - 1;
+
     return `
       <div class="team-card">
         <div class="team-card-header">
           <div class="team-card-name">
-            <span class="team-card-emoji">${team.emoji}</span>
+            <span class="team-order-badge">${idx + 1}</span>
+            ${team.emoji ? `<span class="team-card-emoji">${team.emoji}</span>` : ''}
             <span>${team.name}</span>
           </div>
-          <button class="btn-delete" onclick="deleteTeam('${team.id}')">刪除</button>
+          <div class="team-card-controls">
+            <button type="button" class="btn-order" onclick="moveTeamOrder(${idx}, -1)" title="順序往前移" ${isFirst ? 'disabled' : ''}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+            </button>
+            <button type="button" class="btn-order" onclick="moveTeamOrder(${idx}, 1)" title="順序往後移" ${isLast ? 'disabled' : ''}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <button type="button" class="btn-edit" onclick="showEditTeamModal('${team.id}')">編輯</button>
+            <button type="button" class="btn-delete" onclick="deleteTeam('${team.id}')">刪除</button>
+          </div>
         </div>
         <div class="team-card-stats">
           <div class="team-stat">
-            <div class="team-stat-val" style="color:${team.color}">${teamRecords.length}</div>
+            <div class="team-stat-val" style="color:${team.color || 'var(--text-primary)'}">${teamRecords.length}</div>
             <div class="team-stat-lbl">紀錄數</div>
           </div>
           <div class="team-stat">
-            <div class="team-stat-val" style="color:${team.color}">${families}</div>
+            <div class="team-stat-val" style="color:${team.color || 'var(--text-primary)'}">${families}</div>
             <div class="team-stat-lbl">服務家庭</div>
           </div>
         </div>
@@ -807,8 +821,26 @@ function renderTeamsAdmin() {
   }).join('');
 }
 
+// 調整團隊順序（往前或往後）
+function moveTeamOrder(index, direction) {
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= state.teams.length) return;
+  const temp = state.teams[index];
+  state.teams[index] = state.teams[newIndex];
+  state.teams[newIndex] = temp;
+
+  saveToStorage();
+  saveTeamsToSheets();
+  renderTeamsAdmin();
+  renderTeamList();
+  setupAdminFilters();
+  showToast('團隊順序已更新並同步至雲端', 'success');
+}
+
 function showAddTeamModal() {
-  const emojis = ['🌸', '🌊', '🔥', '⚡', '🌈', '🎯', '🌿', '💫', '🏆', '🤝'];
+  const emojis = ['🌸', '🌿', '🕊️', '✨', '🌟', '🤝', '🎯', '🌱', '☀️', '🌈', '🎁', '💖'];
+  window._selectedEmoji = ''; // 預設無圖示
+
   openModal(`
     <h3 class="modal-title">新增事工團隊</h3>
     <div class="field-group">
@@ -816,30 +848,56 @@ function showAddTeamModal() {
       <input type="text" id="new-team-name" class="field-input" placeholder="例：希望之光" />
     </div>
     <div class="field-group">
-      <label class="field-label">團隊圖示</label>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px">
-        ${emojis.map(e => `<button onclick="selectTeamEmoji(this,'${e}')" style="font-size:24px; padding:8px; background:rgba(255,255,255,0.05); border:2px solid var(--border); border-radius:8px; cursor:pointer; transition: all 0.2s">${e}</button>`).join('')}
+      <label class="field-label">團隊圖示（選填，預設無圖示）</label>
+      <div class="emoji-picker-row">
+        <button type="button" class="emoji-opt-btn selected" onclick="selectTeamEmoji(this, '')">無圖示</button>
+        ${emojis.map(e => `<button type="button" class="emoji-opt-btn" onclick="selectTeamEmoji(this, '${e}')">${e}</button>`).join('')}
       </div>
     </div>
     <div class="field-group">
       <label class="field-label">代表色</label>
-      <input type="color" id="new-team-color" value="#7c5cfc" class="field-input" style="height:42px; padding:4px;" />
+      <input type="color" id="new-team-color" value="#6366f1" class="field-input" style="height:44px; padding:4px;" />
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal()">取消</button>
       <button class="btn btn-primary" onclick="addTeam()">建立團隊</button>
     </div>
   `);
-  window._selectedEmoji = '🌟';
+}
+
+function showEditTeamModal(id) {
+  const team = state.teams.find(t => t.id === id);
+  if (!team) return;
+  const emojis = ['🌸', '🌿', '🕊️', '✨', '🌟', '🤝', '🎯', '🌱', '☀️', '🌈', '🎁', '💖'];
+  window._selectedEmoji = team.emoji || '';
+
+  openModal(`
+    <h3 class="modal-title">編輯事工團隊</h3>
+    <div class="field-group">
+      <label class="field-label required">團隊名稱</label>
+      <input type="text" id="edit-team-name" class="field-input" value="${team.name}" />
+    </div>
+    <div class="field-group">
+      <label class="field-label">團隊圖示（選填）</label>
+      <div class="emoji-picker-row">
+        <button type="button" class="emoji-opt-btn ${!window._selectedEmoji ? 'selected' : ''}" onclick="selectTeamEmoji(this, '')">無圖示</button>
+        ${emojis.map(e => `<button type="button" class="emoji-opt-btn ${window._selectedEmoji === e ? 'selected' : ''}" onclick="selectTeamEmoji(this, '${e}')">${e}</button>`).join('')}
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">代表色</label>
+      <input type="color" id="edit-team-color" value="${team.color || '#6366f1'}" class="field-input" style="height:44px; padding:4px;" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="updateTeam('${team.id}')">儲存變更</button>
+    </div>
+  `);
 }
 
 function selectTeamEmoji(btn, emoji) {
-  document.querySelectorAll('.modal-card button[onclick*="selectTeamEmoji"]').forEach(b => {
-    b.style.borderColor = 'var(--border)';
-    b.style.background = 'rgba(255,255,255,0.05)';
-  });
-  btn.style.borderColor = 'var(--primary)';
-  btn.style.background = 'rgba(124,92,252,0.2)';
+  document.querySelectorAll('.emoji-opt-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
   window._selectedEmoji = emoji;
 }
 
@@ -851,7 +909,7 @@ function addTeam() {
   const team = {
     id,
     name,
-    emoji: window._selectedEmoji || '🌟',
+    emoji: window._selectedEmoji || '',
     color: document.getElementById('new-team-color').value,
     createdAt: new Date().toISOString(),
   };
@@ -864,6 +922,25 @@ function addTeam() {
   renderTeamList();
   setupAdminFilters();
   showToast(`團隊「${name}」已建立，已同步到所有裝置`, 'success');
+}
+
+function updateTeam(id) {
+  const name = document.getElementById('edit-team-name').value.trim();
+  if (!name) return showToast('請輸入團隊名稱', 'error');
+  const team = state.teams.find(t => t.id === id);
+  if (!team) return;
+
+  team.name = name;
+  team.emoji = window._selectedEmoji || '';
+  team.color = document.getElementById('edit-team-color').value;
+
+  saveToStorage();
+  saveTeamsToSheets();
+  closeModal();
+  renderTeamsAdmin();
+  renderTeamList();
+  setupAdminFilters();
+  showToast(`團隊「${name}」已更新並同步`, 'success');
 }
 
 function deleteTeam(id) {
