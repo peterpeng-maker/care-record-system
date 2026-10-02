@@ -67,13 +67,39 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ===========================
+// DATE & MONTH FORMAT HELPER
+// ===========================
+function formatMonth(val) {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    val = val.trim();
+    // 若為 2026-09-30T16:00:00.000Z 或包含 T，截取前面的 2026-09-30
+    if (val.includes('T')) {
+      return val.split('T')[0];
+    }
+    return val;
+  }
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '';
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return String(val);
+}
+
+// ===========================
 // LOCAL STORAGE
 // ===========================
 function loadFromStorage() {
   const saved = localStorage.getItem('careSystem');
   if (saved) {
     const data = JSON.parse(saved);
-    state.records = data.records || [];
+    state.records = (data.records || []).map(r => ({
+      ...r,
+      month: formatMonth(r.month),
+    }));
     state.teams = ensureTeamCodesAndCases(data.teams || getDefaultTeams());
     state.adminPassword = data.adminPassword || 'admin123';
     state.sheetsUrl = data.sheetsUrl || DEFAULT_SHEETS_URL;
@@ -345,7 +371,7 @@ async function submitForm() {
   const record = {
     id: Date.now().toString(),
     submittedAt: new Date().toISOString(),
-    month: document.getElementById('f-month').value,
+    month: formatMonth(document.getElementById('f-month').value),
     volunteerName: state.volunteerName,
     volunteerNameEn: state.volunteerNameEn,
     teamId: state.currentTeam.id,
@@ -440,6 +466,9 @@ async function fetchFromSheets() {
       const rec = { id: 'sheets-' + idx };
       Object.entries(colMap).forEach(([zh, en]) => {
         let val = row[zh] || '';
+        if (en === 'month') {
+          val = formatMonth(val);
+        }
         if (en === 'familyStatus' || en === 'childStatus') {
           val = val ? val.split('、').filter(Boolean) : [];
         }
@@ -656,9 +685,10 @@ function setupAdminFilters() {
 
   const monthEl = document.getElementById('filter-month');
   if (monthEl) {
-    const months = [...new Set(state.records.map(r => r.month))].sort().reverse();
+    const current = monthEl.value || 'all';
+    const months = [...new Set(state.records.map(r => formatMonth(r.month)).filter(Boolean))].sort().reverse();
     monthEl.innerHTML = '<option value="all">所有月份</option>' +
-      months.map(m => `<option value="${m}">${m}</option>`).join('');
+      months.map(m => `<option value="${m}" ${current === m ? 'selected' : ''}>${m}</option>`).join('');
   }
 }
 
@@ -667,7 +697,7 @@ function getFilteredRecords() {
   const monthFilter = document.getElementById('filter-month')?.value || 'all';
   return state.records.filter(r =>
     (teamFilter === 'all' || r.teamId === teamFilter) &&
-    (monthFilter === 'all' || r.month === monthFilter)
+    (monthFilter === 'all' || formatMonth(r.month) === monthFilter)
   );
 }
 
@@ -813,8 +843,8 @@ function renderAlertFamilies(records) {
     <div class="alert-item">
       <div class="alert-dot"></div>
       <div class="alert-item-info">
-        <div class="alert-family-id">家庭 ${r.familyId} <span class="badge badge-alert">${r.teamName}</span></div>
-        <div class="alert-meta">服事夥伴：${r.volunteerName}｜月份：${r.month}｜${r.notes ? '備註：' + r.notes.substring(0, 40) + '…' : '無備註'}</div>
+        <div class="alert-family-id">個案 ${r.familyId} <span class="badge badge-alert">${r.teamName}</span></div>
+        <div class="alert-meta">服事夥伴：${r.volunteerName}｜月份：${formatMonth(r.month)}｜${r.notes ? '備註：' + r.notes.substring(0, 40) + '…' : '無備註'}</div>
       </div>
     </div>
   `).join('');
@@ -842,13 +872,14 @@ function renderRecordsTable() {
   if (!tbody) return;
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">沒有符合的紀錄</div></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">沒有符合的紀錄</div></div></td></tr>`;
     return;
   }
 
   tbody.innerHTML = filtered.map(r => `
     <tr>
       <td>${formatDate(r.submittedAt)}</td>
+      <td><span class="badge" style="background: rgba(255,255,255,0.06); font-family: monospace;">${formatMonth(r.month) || '—'}</span></td>
       <td>${r.volunteerName}</td>
       <td><span class="badge" style="background: rgba(124,92,252,0.15); color: var(--primary-light); border: 1px solid rgba(124,92,252,0.3)">${r.teamName}</span></td>
       <td><strong>${r.familyId}</strong></td>
@@ -874,7 +905,12 @@ function deleteRecord(id) {
 }
 
 function formatDate(iso) {
+  if (!iso) return '—';
+  if (typeof iso === 'string' && iso.includes('T')) {
+    return iso.split('T')[0].replace(/-/g, '/');
+  }
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
   return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
 }
 
@@ -882,10 +918,11 @@ function formatDate(iso) {
 // EXPORT CSV
 // ===========================
 function exportCSV() {
-  const headers = ['提交日期', '服事夥伴姓名', '英文姓名', '團隊', '個案標號', '關懷組別', '月份', '本月關懷', '家庭狀況', '兒童狀況', '關懷態度', '互動情況', '需要協助', '備註'];
+  const headers = ['提交日期', '月份', '服事夥伴姓名', '英文姓名', '團隊', '個案標號', '關懷組別', '本月關懷', '家庭狀況', '兒童狀況', '關懷態度', '互動情況', '需要協助', '備註'];
   const rows = state.records.map(r => [
     formatDate(r.submittedAt),
-    r.volunteerName, r.volunteerNameEn, r.teamName, r.familyId, r.group, r.month,
+    formatMonth(r.month),
+    r.volunteerName, r.volunteerNameEn, r.teamName, r.familyId, r.group,
     r.visited, (r.familyStatus || []).join('|'), (r.childStatus || []).join('|'),
     r.attitude, r.interaction, r.needsHelp, r.notes,
   ]);
@@ -1336,7 +1373,16 @@ function doGet(e) {
     const headers = data[0];
     return json(data.slice(1).map(row => {
       const obj = {};
-      headers.forEach((h, i) => { obj[h] = row[i]; });
+      headers.forEach((h, i) => {
+        let cell = row[i];
+        if (cell instanceof Date) {
+          const y = cell.getFullYear();
+          const m = String(cell.getMonth() + 1).padStart(2, '0');
+          const d = String(cell.getDate()).padStart(2, '0');
+          cell = y + '-' + m + '-' + d;
+        }
+        obj[h] = cell;
+      });
       return obj;
     }));
   }
@@ -1357,20 +1403,24 @@ function doGet(e) {
     return json({ status: 'ok' });
   }
 
-  // 新增紀錄（志工填表使用）
+  // 新增紀錄（服事夥伴填表使用）
   if (e.parameter && e.parameter.data) {
     try {
       const rec = JSON.parse(e.parameter.data);
       const sheet = getSheet('紀錄');
       if (sheet.getLastRow() === 0) {
-        sheet.appendRow(['提交日期','志工姓名','英文姓名','團隊','個案標號',
+        sheet.appendRow(['提交日期','服事夥伴姓名','英文姓名','團隊','個案標號',
           '關懷組別','月份','本月關懷','家庭狀況','兒童狀況',
           '關懷態度','互動情況','需要協助','備註']);
+      }
+      let monthStr = rec.month || '';
+      if (typeof monthStr === 'string' && monthStr.indexOf('T') !== -1) {
+        monthStr = monthStr.split('T')[0];
       }
       sheet.appendRow([
         new Date(rec.submittedAt).toLocaleString('zh-TW'),
         rec.volunteerName, rec.volunteerNameEn, rec.teamName, rec.familyId,
-        rec.group, rec.month, rec.visited,
+        rec.group, monthStr, rec.visited,
         (rec.familyStatus||[]).join('、'), (rec.childStatus||[]).join('、'),
         rec.attitude, rec.interaction, rec.needsHelp, rec.notes
       ]);
