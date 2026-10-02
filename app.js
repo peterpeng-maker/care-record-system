@@ -727,36 +727,61 @@ function renderBarChart(containerId, data, colors) {
   const max = Math.max(...data.map(d => d.count), 1);
   container.innerHTML = data.length === 0
     ? '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">尚無資料</div></div>'
-    : data.map((d, i) => `
-      <div class="bar-item">
-        <div class="bar-label-row">
-          <span>${d.label}</span>
-          <span>${d.count}</span>
+    : data.map((d, i) => {
+      const pct = d.count === 0 ? 0 : Math.max(Math.round((d.count / max) * 100), 3);
+      const bg = colors ? colors[i % colors.length] : 'linear-gradient(90deg, #6366f1, #818cf8)';
+      return `
+        <div class="bar-item">
+          <div class="bar-label-row">
+            <span>${d.label}</span>
+            <span style="font-weight: 600; color: ${d.count > 0 ? 'var(--text-primary)' : 'var(--text-disabled)'}">${d.count}</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width: ${pct}%; background: ${bg}; opacity: ${d.count === 0 ? 0 : 1}"></div>
+          </div>
         </div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width: ${Math.round(d.count / max * 100)}%; background: ${colors ? colors[i % colors.length] : 'linear-gradient(90deg, var(--primary), var(--primary-light))'}"></div>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 }
 
 function renderFamilyStatusChart(records) {
   const keys = ['經濟困難', '居住環境不佳', '隔代教養', '新住民家庭', '照顧者高齡', '照顧者疾病'];
   const data = keys.map(k => ({ label: k, count: records.filter(r => r.familyStatus?.includes(k)).length }));
-  renderBarChart('chart-family-status', data);
+  const colors = [
+    'linear-gradient(90deg, #f59e0b, #fbbf24)',
+    'linear-gradient(90deg, #3b82f6, #60a5fa)',
+    'linear-gradient(90deg, #8b5cf6, #a78bfa)',
+    'linear-gradient(90deg, #10b981, #34d399)',
+    'linear-gradient(90deg, #f43f5e, #fb7185)',
+    'linear-gradient(90deg, #06b6d4, #22d3ee)',
+  ];
+  renderBarChart('chart-family-status', data, colors);
 }
 
 function renderChildStatusChart(records) {
   const keys = ['課業學習落後', '同儕人際疏離', '家庭氣氛緊張', '情緒起伏', '壓抑', '行為常規偏差'];
   const data = keys.map(k => ({ label: k, count: records.filter(r => r.childStatus?.includes(k)).length }));
-  const colors = ['#4fc3f7', '#00d4aa', '#ff8c42', '#ff5c7a', '#7c5cfc', '#ffd166'];
+  const colors = [
+    'linear-gradient(90deg, #38bdf8, #7dd3fc)',
+    'linear-gradient(90deg, #2dd4bf, #5eead4)',
+    'linear-gradient(90deg, #fb923c, #fdba74)',
+    'linear-gradient(90deg, #f43f5e, #fb7185)',
+    'linear-gradient(90deg, #a855f7, #c084fc)',
+    'linear-gradient(90deg, #eab308, #fde047)',
+  ];
   renderBarChart('chart-child-status', data, colors);
 }
 
 function renderAttitudeChart(records) {
   const keys = ['非常接受', '接受', '中等', '稍微接受', '不接受'];
   const data = keys.map(k => ({ label: k, count: records.filter(r => r.attitude === k).length }));
-  const colors = ['#00d4aa', '#4fc3f7', '#ffd166', '#ff8c42', '#ff5c7a'];
+  const colors = [
+    'linear-gradient(90deg, #10b981, #34d399)',
+    'linear-gradient(90deg, #06b6d4, #22d3ee)',
+    'linear-gradient(90deg, #3b82f6, #60a5fa)',
+    'linear-gradient(90deg, #f59e0b, #fbbf24)',
+    'linear-gradient(90deg, #ef4444, #f87171)',
+  ];
   renderBarChart('chart-attitude', data, colors);
 }
 

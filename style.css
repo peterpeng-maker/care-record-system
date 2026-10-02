@@ -15,6 +15,7 @@
 
   --primary: #6366f1;
   --primary-hover: #4f46e5;
+  --primary-light: #818cf8;
   --primary-subtle: rgba(99, 102, 241, 0.12);
 
   --accent-teal: #14b8a6;
@@ -919,16 +920,19 @@ select.field-input {
 }
 
 .bar-track {
-  height: 6px;
-  background-color: var(--bg-input);
+  height: 8px;
+  background-color: rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-full);
   overflow: hidden;
+  position: relative;
 }
 
 .bar-fill {
   height: 100%;
   border-radius: var(--radius-full);
   background-color: var(--primary);
+  min-width: 0;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.25);
   transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
