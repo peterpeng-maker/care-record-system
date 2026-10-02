@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const sheetsTeams = await fetchTeamsFromSheets();
       if (sheetsTeams && sheetsTeams.length > 0) {
-        state.teams = sheetsTeams;
+        state.teams = ensureTeamCodesAndCases(sheetsTeams);
         saveToStorage();
         renderTeamList();
         setupAdminFilters();
@@ -74,11 +74,11 @@ function loadFromStorage() {
   if (saved) {
     const data = JSON.parse(saved);
     state.records = data.records || [];
-    state.teams = data.teams || getDefaultTeams();
+    state.teams = ensureTeamCodesAndCases(data.teams || getDefaultTeams());
     state.adminPassword = data.adminPassword || 'admin123';
     state.sheetsUrl = data.sheetsUrl || DEFAULT_SHEETS_URL;
   } else {
-    state.teams = getDefaultTeams();
+    state.teams = ensureTeamCodesAndCases(getDefaultTeams());
     state.sheetsUrl = DEFAULT_SHEETS_URL;
     saveToStorage();
   }
@@ -98,10 +98,44 @@ function saveToStorage() {
 
 function getDefaultTeams() {
   return [
-    { id: 'angel-tree', name: '天使樹', emoji: '🎄', color: '#7c5cfc', createdAt: new Date().toISOString() },
-    { id: 'hope', name: '希望之光', emoji: '🌟', color: '#00d4aa', createdAt: new Date().toISOString() },
-    { id: 'grace', name: '恩典事工', emoji: '🕊️', color: '#ff8c42', createdAt: new Date().toISOString() },
+    { id: 'angel-tree', name: '天使樹', code: 'A', emoji: '🎄', color: '#6366f1', cases: ['A-01', 'A-02', 'A-03', 'A-04', 'A-05', 'A-06', 'A-07', 'A-08', 'A-09', 'A-10'], createdAt: new Date().toISOString() },
+    { id: 'hope', name: '希望之光', code: 'B', emoji: '🌟', color: '#14b8a6', cases: ['B-01', 'B-02', 'B-03', 'B-04', 'B-05', 'B-06', 'B-07', 'B-08', 'B-09', 'B-10'], createdAt: new Date().toISOString() },
+    { id: 'grace', name: '恩典事工', code: 'C', emoji: '🕊️', color: '#f59e0b', cases: ['C-01', 'C-02', 'C-03', 'C-04', 'C-05', 'C-06', 'C-07', 'C-08', 'C-09', 'C-10'], createdAt: new Date().toISOString() },
   ];
+}
+
+// Ensure each team has a unique letter code and cases list
+function ensureTeamCodesAndCases(teams) {
+  if (!Array.isArray(teams)) return teams;
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const usedCodes = new Set();
+
+  teams.forEach(t => {
+    if (t.code) usedCodes.add(t.code.toUpperCase());
+  });
+
+  teams.forEach(team => {
+    if (!team.code) {
+      const nextLetter = letters.find(l => !usedCodes.has(l)) || 'A';
+      team.code = nextLetter;
+      usedCodes.add(nextLetter);
+    } else {
+      team.code = team.code.toUpperCase();
+    }
+
+    if (!Array.isArray(team.cases) || team.cases.length === 0) {
+      const c = team.code;
+      team.cases = Array.from({ length: 10 }, (_, i) => `${c}-${String(i + 1).padStart(2, '0')}`);
+    }
+  });
+
+  return teams;
+}
+
+function getNextAvailableCode() {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const used = new Set(state.teams.map(t => t.code ? t.code.toUpperCase() : ''));
+  return letters.find(l => !used.has(l)) || 'A';
 }
 
 // ===========================
@@ -155,6 +189,9 @@ function enterAsVolunteer() {
   document.getElementById('volunteer-badge').textContent = '服事夥伴：' + name;
   showToast(`平安，${name} 夥伴！`, 'success');
 
+  // Populate case dropdown for selected team
+  populateCaseDropdown();
+
   // Reset form to step 1
   goToStep(1);
   showScreen('screen-form');
@@ -183,10 +220,98 @@ function goToStep(n) {
   });
 }
 
+function populateCaseDropdown() {
+  const select = document.getElementById('f-family-id');
+  const customWrap = document.getElementById('f-family-id-custom-wrap');
+  const customInput = document.getElementById('f-family-id-custom');
+  const toggleBtn = document.getElementById('btn-toggle-custom-id');
+  if (!select) return;
+
+  const cases = state.currentTeam?.cases || [];
+  const code = state.currentTeam?.code || 'A';
+
+  if (cases.length === 0) {
+    select.style.display = 'none';
+    if (customWrap) customWrap.style.display = 'block';
+    if (toggleBtn) toggleBtn.style.display = 'none';
+    if (customInput) {
+      customInput.value = '';
+      customInput.placeholder = `例：${code}-01、101`;
+    }
+  } else {
+    select.style.display = 'block';
+    if (customWrap) customWrap.style.display = 'none';
+    if (toggleBtn) {
+      toggleBtn.style.display = 'inline-flex';
+      toggleBtn.textContent = '✏️ 手動輸入';
+    }
+    if (customInput) customInput.value = '';
+
+    select.innerHTML = `
+      <option value="">請選擇個案標號...</option>
+      ${cases.map(c => `<option value="${c}">${c}</option>`).join('')}
+      <option value="__custom__">✏️ 自訂 / 手動輸入其他標號...</option>
+    `;
+  }
+}
+
+function onCaseSelectChange(sel) {
+  const customWrap = document.getElementById('f-family-id-custom-wrap');
+  const customInput = document.getElementById('f-family-id-custom');
+  const toggleBtn = document.getElementById('btn-toggle-custom-id');
+
+  if (sel.value === '__custom__') {
+    if (customWrap) customWrap.style.display = 'block';
+    if (customInput) {
+      customInput.focus();
+      customInput.placeholder = `請手動輸入個案標號（例：${state.currentTeam?.code || 'A'}-21）`;
+    }
+    if (toggleBtn) toggleBtn.textContent = '📋 改用選單';
+  } else {
+    if (customWrap) customWrap.style.display = 'none';
+    if (toggleBtn) toggleBtn.textContent = '✏️ 手動輸入';
+  }
+}
+
+function toggleCustomCaseId() {
+  const select = document.getElementById('f-family-id');
+  const customWrap = document.getElementById('f-family-id-custom-wrap');
+  const customInput = document.getElementById('f-family-id-custom');
+  const toggleBtn = document.getElementById('btn-toggle-custom-id');
+
+  const isCustomVisible = customWrap && customWrap.style.display !== 'none';
+  if (isCustomVisible) {
+    if (customWrap) customWrap.style.display = 'none';
+    if (select) {
+      select.style.display = 'block';
+      if (select.value === '__custom__') select.value = '';
+    }
+    if (toggleBtn) toggleBtn.textContent = '✏️ 手動輸入';
+  } else {
+    if (customWrap) customWrap.style.display = 'block';
+    if (customInput) customInput.focus();
+    if (toggleBtn) toggleBtn.textContent = '📋 改用選單';
+  }
+}
+
+function getSelectedFamilyId() {
+  const select = document.getElementById('f-family-id');
+  const customWrap = document.getElementById('f-family-id-custom-wrap');
+  const customInput = document.getElementById('f-family-id-custom');
+
+  if (customWrap && customWrap.style.display !== 'none' && customInput && customInput.value.trim()) {
+    return customInput.value.trim();
+  }
+  if (select && select.style.display !== 'none' && select.value && select.value !== '__custom__') {
+    return select.value.trim();
+  }
+  return customInput ? customInput.value.trim() : '';
+}
+
 function nextStep(current) {
   if (current === 1) {
     if (!document.getElementById('f-month').value) return showToast('請填寫提交月份', 'error');
-    if (!document.getElementById('f-family-id').value.trim()) return showToast('請填寫個案家庭標號', 'error');
+    if (!getSelectedFamilyId()) return showToast('請選擇或填寫個案標號', 'error');
   }
   if (current < 3) goToStep(current + 1);
 }
@@ -208,6 +333,9 @@ async function submitForm() {
   const visited = document.querySelector('input[name="visited"]:checked');
   if (!visited) return showToast('請選擇本月是否有關懷個案家庭', 'error');
 
+  const familyId = getSelectedFamilyId();
+  if (!familyId) return showToast('請選擇或填寫個案標號', 'error');
+
   // Collect data
   const familyStatus = Array.from(document.querySelectorAll('#family-status-checks input:checked')).map(i => i.value);
   const childStatus = Array.from(document.querySelectorAll('#child-status-checks input:checked')).map(i => i.value);
@@ -222,7 +350,7 @@ async function submitForm() {
     volunteerNameEn: state.volunteerNameEn,
     teamId: state.currentTeam.id,
     teamName: state.currentTeam.name,
-    familyId: document.getElementById('f-family-id').value.trim(),
+    familyId: familyId,
     group: document.getElementById('f-group').value.trim(),
     familyStatus,
     childStatus,
@@ -247,7 +375,14 @@ async function submitForm() {
 }
 
 function resetForm() {
-  document.getElementById('f-family-id').value = '';
+  const select = document.getElementById('f-family-id');
+  if (select) select.value = '';
+  const customInput = document.getElementById('f-family-id-custom');
+  if (customInput) customInput.value = '';
+  const customWrap = document.getElementById('f-family-id-custom-wrap');
+  if (customWrap && (state.currentTeam?.cases?.length || 0) > 0) {
+    customWrap.style.display = 'none';
+  }
   document.getElementById('f-group').value = '';
   document.getElementById('f-notes').value = '';
   document.querySelectorAll('#family-status-checks input, #child-status-checks input').forEach(i => i.checked = false);
@@ -786,12 +921,14 @@ function renderTeamsAdmin() {
     const families = new Set(teamRecords.map(r => r.familyId)).size;
     const isFirst = idx === 0;
     const isLast = idx === state.teams.length - 1;
+    const casesCount = (team.cases || []).length;
 
     return `
       <div class="team-card">
         <div class="team-card-header">
           <div class="team-card-name">
             <span class="team-order-badge">${idx + 1}</span>
+            <span class="team-code-badge">代號 ${team.code || 'A'}</span>
             ${team.emoji ? `<span class="team-card-emoji">${team.emoji}</span>` : ''}
             <span>${team.name}</span>
           </div>
@@ -802,6 +939,7 @@ function renderTeamsAdmin() {
             <button type="button" class="btn-order" onclick="moveTeamOrder(${idx}, 1)" title="順序往後移" ${isLast ? 'disabled' : ''}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
+            <button type="button" class="btn-cases" onclick="showCasesModal('${team.id}')">📋 個案標號 (${casesCount})</button>
             <button type="button" class="btn-edit" onclick="showEditTeamModal('${team.id}')">編輯</button>
             <button type="button" class="btn-delete" onclick="deleteTeam('${team.id}')">刪除</button>
           </div>
@@ -814,6 +952,10 @@ function renderTeamsAdmin() {
           <div class="team-stat">
             <div class="team-stat-val" style="color:${team.color || 'var(--text-primary)'}">${families}</div>
             <div class="team-stat-lbl">服務家庭</div>
+          </div>
+          <div class="team-stat">
+            <div class="team-stat-val" style="color:#a5b4fc">${casesCount}</div>
+            <div class="team-stat-lbl">預設個案標號</div>
           </div>
         </div>
       </div>
@@ -837,7 +979,160 @@ function moveTeamOrder(index, direction) {
   showToast('團隊順序已更新並同步至雲端', 'success');
 }
 
+// ===========================
+// CASE ID MANAGEMENT MODAL
+// ===========================
+function showCasesModal(id) {
+  const team = state.teams.find(t => t.id === id);
+  if (!team) return;
+  if (!Array.isArray(team.cases)) team.cases = [];
+
+  window._editingTeamId = id;
+  renderCasesModalContent(team);
+}
+
+function renderCasesModalContent(team) {
+  const code = team.code || 'A';
+  const cases = team.cases || [];
+
+  openModal(`
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h3 class="modal-title" style="margin-bottom:0">📋 個案標號管理 — ${team.name}</h3>
+      <span class="team-code-badge">代號 ${code}</span>
+    </div>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px; line-height:1.5;">
+      設定該機構專屬的個案標號。服事夥伴填表時即可直接透過下拉選單挑選，不必手動打字。
+    </p>
+
+    <!-- 現有標號區塊 -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <label class="field-label" style="margin-bottom:0">現有個案標號（共 ${cases.length} 個）</label>
+      ${cases.length > 0 ? `<button type="button" class="btn-refresh" style="color:var(--accent-rose)" onclick="clearAllCases('${team.id}')">全部清空</button>` : ''}
+    </div>
+    <div class="case-tags-container">
+      ${cases.length === 0 ? '<span style="color:var(--text-muted); font-size:12px; padding:8px;">尚未建立個案標號，請使用下方快速產生或手動加入。</span>' : ''}
+      ${cases.map((c, i) => `
+        <span class="case-tag">
+          ${c}
+          <button type="button" class="case-tag-del" onclick="deleteCaseTag('${team.id}', ${i})" title="刪除此標號">✕</button>
+        </span>
+      `).join('')}
+    </div>
+
+    <!-- 快速批次產生 -->
+    <div class="case-batch-box">
+      <div style="font-size:13px; font-weight:600; color:var(--text-primary)">⚡ 快速批次產生標號</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:4px;">
+          <span style="font-size:12px; color:var(--text-muted)">前綴:</span>
+          <input type="text" id="batch-prefix" class="field-input input-sm" style="width:70px" value="${code}-" placeholder="前綴" />
+        </div>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <span style="font-size:12px; color:var(--text-muted)">從:</span>
+          <input type="number" id="batch-start" class="field-input input-sm" style="width:65px" value="1" min="1" />
+        </div>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <span style="font-size:12px; color:var(--text-muted)">至:</span>
+          <input type="number" id="batch-end" class="field-input input-sm" style="width:65px" value="20" min="1" />
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="batchGenerateCases('${team.id}')" style="flex:1; min-width:90px;">批次產生</button>
+      </div>
+    </div>
+
+    <!-- 手動單筆或整批貼上 -->
+    <div style="margin-top:16px;">
+      <label class="field-label">手動新增標號（支援空格、逗號或多行整批貼上）</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="manual-case-input" class="field-input input-sm" placeholder="輸入標號（例：${code}-21、${code}-22）" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addManualCases('${team.id}');}" />
+        <button type="button" class="btn btn-primary btn-sm" onclick="addManualCases('${team.id}')">加入</button>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:24px;">
+      <button class="btn btn-primary btn-full" onclick="saveCasesAndClose('${team.id}')">完成並同步至雲端</button>
+    </div>
+  `);
+}
+
+function batchGenerateCases(teamId) {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team) return;
+  const prefix = document.getElementById('batch-prefix').value.trim() || `${team.code || 'A'}-`;
+  const start = parseInt(document.getElementById('batch-start').value, 10) || 1;
+  const end = parseInt(document.getElementById('batch-end').value, 10) || 20;
+
+  if (start > end) return showToast('起訖數值不正確', 'error');
+  if (end - start > 200) return showToast('一次最多產生 200 個標號', 'error');
+
+  if (!Array.isArray(team.cases)) team.cases = [];
+  const existingSet = new Set(team.cases);
+  let count = 0;
+
+  for (let i = start; i <= end; i++) {
+    const formatted = `${prefix}${String(i).padStart(2, '0')}`;
+    if (!existingSet.has(formatted)) {
+      team.cases.push(formatted);
+      existingSet.add(formatted);
+      count++;
+    }
+  }
+
+  renderCasesModalContent(team);
+  showToast(`已成功產生 ${count} 個新標號`, 'success');
+}
+
+function addManualCases(teamId) {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team) return;
+  const input = document.getElementById('manual-case-input');
+  if (!input) return;
+  const raw = input.value.trim();
+  if (!raw) return showToast('請輸入個案標號', 'error');
+
+  const items = raw.split(/[\s,，、\n]+/).map(s => s.trim()).filter(Boolean);
+  if (!Array.isArray(team.cases)) team.cases = [];
+  const existingSet = new Set(team.cases);
+  let added = 0;
+
+  items.forEach(c => {
+    if (!existingSet.has(c)) {
+      team.cases.push(c);
+      existingSet.add(c);
+      added++;
+    }
+  });
+
+  input.value = '';
+  renderCasesModalContent(team);
+  showToast(`已加入 ${added} 個個案標號`, 'success');
+}
+
+function deleteCaseTag(teamId, index) {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team || !Array.isArray(team.cases)) return;
+  team.cases.splice(index, 1);
+  renderCasesModalContent(team);
+}
+
+function clearAllCases(teamId) {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team) return;
+  if (!confirm(`確定要清空「${team.name}」的所有個案標號？`)) return;
+  team.cases = [];
+  renderCasesModalContent(team);
+}
+
+function saveCasesAndClose(teamId) {
+  const team = state.teams.find(t => t.id === teamId);
+  saveToStorage();
+  saveTeamsToSheets();
+  closeModal();
+  renderTeamsAdmin();
+  showToast(`「${team?.name}」個案標號已更新並同步至所有裝置`, 'success');
+}
+
 function showAddTeamModal() {
+  const defaultCode = getNextAvailableCode();
   const emojis = ['🌸', '🌿', '🕊️', '✨', '🌟', '🤝', '🎯', '🌱', '☀️', '🌈', '🎁', '💖'];
   window._selectedEmoji = ''; // 預設無圖示
 
@@ -846,6 +1141,15 @@ function showAddTeamModal() {
     <div class="field-group">
       <label class="field-label required">團隊名稱</label>
       <input type="text" id="new-team-name" class="field-input" placeholder="例：希望之光" />
+    </div>
+    <div class="field-group">
+      <label class="field-label required">機構英文代號（個案標號前綴）</label>
+      <input type="text" id="new-team-code" class="field-input" value="${defaultCode}" maxlength="4" style="text-transform:uppercase" placeholder="例：A 或 B" />
+      <span style="font-size:12px; color:var(--text-muted); margin-top:2px">每個機構專屬字母代號，如天使樹為 A，個案標號將為 A-01、A-02...</span>
+    </div>
+    <div class="field-group">
+      <label class="field-label">預先產生個案標號數量</label>
+      <input type="number" id="new-team-case-count" class="field-input" value="10" min="0" max="100" placeholder="建立時自動預建標號數（預設 10 個）" />
     </div>
     <div class="field-group">
       <label class="field-label">團隊圖示（選填，預設無圖示）</label>
@@ -878,6 +1182,11 @@ function showEditTeamModal(id) {
       <input type="text" id="edit-team-name" class="field-input" value="${team.name}" />
     </div>
     <div class="field-group">
+      <label class="field-label required">機構英文代號</label>
+      <input type="text" id="edit-team-code" class="field-input" value="${team.code || 'A'}" maxlength="4" style="text-transform:uppercase" />
+      <span style="font-size:12px; color:var(--text-muted); margin-top:2px">修改代號將作為此團隊個案標號的前綴</span>
+    </div>
+    <div class="field-group">
       <label class="field-label">團隊圖示（選填）</label>
       <div class="emoji-picker-row">
         <button type="button" class="emoji-opt-btn ${!window._selectedEmoji ? 'selected' : ''}" onclick="selectTeamEmoji(this, '')">無圖示</button>
@@ -904,13 +1213,22 @@ function selectTeamEmoji(btn, emoji) {
 function addTeam() {
   const name = document.getElementById('new-team-name').value.trim();
   if (!name) return showToast('請輸入團隊名稱', 'error');
+  const code = (document.getElementById('new-team-code').value.trim() || getNextAvailableCode()).toUpperCase();
+  const caseCount = parseInt(document.getElementById('new-team-case-count').value, 10) || 0;
+
+  const cases = [];
+  for (let i = 1; i <= caseCount; i++) {
+    cases.push(`${code}-${String(i).padStart(2, '0')}`);
+  }
 
   const id = name.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now();
   const team = {
     id,
     name,
+    code,
     emoji: window._selectedEmoji || '',
     color: document.getElementById('new-team-color').value,
+    cases,
     createdAt: new Date().toISOString(),
   };
 
@@ -921,16 +1239,18 @@ function addTeam() {
   renderTeamsAdmin();
   renderTeamList();
   setupAdminFilters();
-  showToast(`團隊「${name}」已建立，已同步到所有裝置`, 'success');
+  showToast(`團隊「${name}」已建立，代號【${code}】，預建 ${cases.length} 個標號`, 'success');
 }
 
 function updateTeam(id) {
   const name = document.getElementById('edit-team-name').value.trim();
   if (!name) return showToast('請輸入團隊名稱', 'error');
+  const code = (document.getElementById('edit-team-code').value.trim() || 'A').toUpperCase();
   const team = state.teams.find(t => t.id === id);
   if (!team) return;
 
   team.name = name;
+  team.code = code;
   team.emoji = window._selectedEmoji || '';
   team.color = document.getElementById('edit-team-color').value;
 

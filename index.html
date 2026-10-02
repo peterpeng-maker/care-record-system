@@ -11,7 +11,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="style.css?v=20261001-5" />
+  <link rel="stylesheet" href="style.css?v=20261002-1" />
 </head>
 <body>
   <!-- App Container -->
@@ -127,8 +127,18 @@
             <input type="month" id="f-month" class="field-input" />
           </div>
           <div class="field-group">
-            <label class="field-label required">個案家庭標號</label>
-            <input type="text" id="f-family-id" class="field-input" placeholder="例：A001、101" />
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label class="field-label required" style="margin-bottom:0">個案標號</label>
+              <button type="button" class="btn-refresh" id="btn-toggle-custom-id" onclick="toggleCustomCaseId()" style="font-size:12px; padding:2px 4px; display:none;">
+                ✏️ 手動輸入
+              </button>
+            </div>
+            <select id="f-family-id" class="field-input" onchange="onCaseSelectChange(this)">
+              <option value="">請選擇個案標號...</option>
+            </select>
+            <div id="f-family-id-custom-wrap" style="display:none; margin-top:8px;">
+              <input type="text" id="f-family-id-custom" class="field-input" placeholder="請手動輸入個案標號（例：A-01、101）" />
+            </div>
           </div>
           <div class="field-group">
             <label class="field-label">關懷組別</label>
@@ -395,7 +405,7 @@
                 <p class="tab-subtitle">所有服事夥伴提交之詳細探訪紀錄</p>
               </div>
               <div class="tab-actions">
-                <input type="text" id="search-records" class="field-input input-sm" placeholder="搜尋家庭標號、夥伴姓名..." oninput="filterRecords()" />
+                <input type="text" id="search-records" class="field-input input-sm" placeholder="搜尋個案標號、夥伴姓名..." oninput="filterRecords()" />
                 <select id="records-filter-team" class="field-input input-sm" onchange="filterRecords()">
                   <option value="all">所有團隊</option>
                 </select>
@@ -412,7 +422,7 @@
                     <th>日期</th>
                     <th>服事夥伴</th>
                     <th>團隊</th>
-                    <th>家庭標號</th>
+                    <th>個案標號</th>
                     <th>本月關懷</th>
                     <th>互動狀況</th>
                     <th>需要協助</th>
@@ -498,6 +508,6 @@
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
-  <script src="app.js?v=20261001-5"></script>
+  <script src="app.js?v=20261002-1"></script>
 </body>
 </html>

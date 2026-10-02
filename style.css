@@ -1122,6 +1122,7 @@ select.field-input {
   gap: var(--space-xs);
   font-size: 15px;
   font-weight: 600;
+  flex-wrap: wrap;
 }
 
 .team-order-badge {
@@ -1138,6 +1139,20 @@ select.field-input {
   flex-shrink: 0;
 }
 
+.team-code-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  background-color: var(--primary-subtle);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
 .team-card-emoji {
   font-size: 22px;
   flex-shrink: 0;
@@ -1147,6 +1162,25 @@ select.field-input {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
+}
+
+.btn-cases {
+  padding: 4px 10px;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  background-color: var(--primary-subtle);
+  color: #a5b4fc;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  transition: var(--transition);
+}
+
+.btn-cases:hover {
+  background-color: rgba(99, 102, 241, 0.25);
+  color: #ffffff;
 }
 
 .btn-order {
@@ -1224,6 +1258,59 @@ select.field-input {
   border-color: var(--primary);
   background-color: var(--primary-subtle);
   color: #ffffff;
+}
+
+/* Case Management Modal Styles */
+.case-tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: var(--space-sm);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-xs);
+}
+
+.case-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.case-tag-del {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1;
+  transition: var(--transition);
+}
+
+.case-tag-del:hover {
+  color: var(--accent-rose);
+}
+
+.case-batch-box {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  margin-top: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
 }
 
 .team-card-stats {
